@@ -223,7 +223,7 @@ static class ModXmlPatcher
                 }
 
                 // Abort else when last result was true
-                if (PreviousResult) return false;
+                if (PreviousResult) return true;
 
                 // Reset flags first
                 PreviousResult = false;
@@ -252,7 +252,7 @@ static class ModXmlPatcher
             case "modelse":
 
                 // Abort else when last result was true
-                if (PreviousResult) return false;
+                if (PreviousResult) return true;
 
                 // Reset flags first
                 IfClauseParsed = false;
@@ -276,8 +276,21 @@ static class ModXmlPatcher
     [HarmonyPatch("PatchXml")]
     public class XmlPatcher_PatchXml
     {
-        static bool Prefix(XmlFile _xmlFile, XmlFile _patchXml, string _patchName, ref bool __result)
+        static bool Prefix(
+            ref XmlFile _xmlFile,
+            ref XmlFile _patchXml,
+            ref string _patchName,
+            ref bool __result)
         {
+            // According to Harmony docs, returning false on a prefix
+            // should skip the original and all other prefixers, but
+            // it seems that it only skips the original. The other
+            // prefixers are still called. The reason for this is
+            // unknown, but could be because the game uses HarmonyX.
+            // Might also be something solved with latest versions,
+            // as the game uses a rather old HarmonyX version (2.2).
+            // To address this we simply "consume" one of the args.
+            if (_patchXml == null) return false;
             XmlElement element = _patchXml.XmlDoc.DocumentElement;
             if (element == null) return false;
             string version = element.GetAttribute("patcher-version");
@@ -287,9 +300,11 @@ static class ModXmlPatcher
                 if (int.Parse(version) > 1) return true;
             }
             // Call out to static helper function
-            __result = ModXmlPatcher.PatchXml(_xmlFile,
-                _patchXml, element, _patchName);
-            // Last one wins
+            __result = PatchXml(
+                _xmlFile, _patchXml,
+                element, _patchName);
+            // First one wins
+            _patchXml = null;
             return false;
         }
     }
